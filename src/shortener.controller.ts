@@ -6,62 +6,159 @@ import {
   GoneException,
   HttpCode,
   HttpStatus,
-  Ip,
   Param,
   Post,
+  Redirect,
+  Req,
+  Res,
 } from '@nestjs/common';
-import { ApiBody, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ShortenerService } from './shortener.service';
-import { ShortenDto } from './shorten.dto';
+import {
+  AnalyticsResponseDto,
+  DeleteResponseDto,
+  ShortenDto,
+  ShortenResponseDto,
+  ShortUrlInfoDto,
+} from './shorten.dto';
+import { Request, Response } from 'express';
 
-@ApiTags('shortener')
+@ApiTags('URL Shortener')
 @Controller()
 export class ShortenerController {
   constructor(private readonly service: ShortenerService) {}
 
   @Post('shorten')
+  @ApiOperation({ summary: 'Create a shortened URL' })
   @ApiBody({ type: ShortenDto })
-  @ApiResponse({ status: 201, description: 'Short URL created' })
-  async shorten(@Body() dto: ShortenDto) {
+  @ApiResponse({
+    status: 201,
+    description: 'URL successfully shortened',
+    type: ShortenResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input (URL format, alias length)',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Alias already exists',
+  })
+  async shorten(@Body() dto: ShortenDto): Promise<ShortenResponseDto> {
     const entity = await this.service.createShortUrl(dto);
     return { shortUrl: entity.short };
   }
 
   @Get(':short')
-  @ApiParam({ name: 'short', description: 'Short URL code' })
-  @ApiResponse({ status: 302, description: 'Redirects to original URL' })
-  async redirect(@Param('short') short: string, @Ip() ip: string) {
+  @ApiOperation({ summary: 'Redirect to original URL' })
+  @ApiParam({
+    name: 'short',
+    description: 'Short URL code',
+    example: 'abc123',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirect to original URL',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Short URL not found',
+  })
+  @ApiResponse({
+    status: 410,
+    description: 'Link has expired',
+  })
+  @Redirect()
+  async redirect(
+    @Param('short') short: string,
+    @Res() res: Response,
+    @Req() req: Request,
+  ) {
     const entity = await this.service.getOriginalUrl(short);
     if (entity.expiresAt && new Date() > entity.expiresAt) {
       throw new GoneException('Link expired');
     }
-    await this.service.incrementClick(short, ip);
-    return {
-      statusCode: HttpStatus.FOUND,
-      headers: { Location: entity.originalUrl },
-    };
+    await this.service.incrementClick(short, req.ip!);
+
+    const userAgent = req.headers['user-agent'] || '';
+
+    if (userAgent.includes('Swagger')) {
+      return res
+        .header('X-Redirect-Location', entity.originalUrl)
+        .status(HttpStatus.OK)
+        .json({ redirectUrl: entity.originalUrl });
+    }
+
+    return res.redirect(HttpStatus.FOUND, entity.originalUrl);
   }
 
   @Get('info/:short')
-  @ApiParam({ name: 'short', description: 'Short URL code' })
-  @ApiResponse({ status: 200, description: 'Short URL info' })
-  async info(@Param('short') short: string) {
+  @ApiOperation({ summary: 'Get information about shortened URL' })
+  @ApiParam({
+    name: 'short',
+    description: 'Short URL code',
+    example: 'abc123',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'URL information retrieved',
+    type: ShortUrlInfoDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Short URL not found',
+  })
+  async info(@Param('short') short: string): Promise<ShortUrlInfoDto> {
     return this.service.getInfo(short);
   }
 
   @Delete('delete/:short')
-  @ApiParam({ name: 'short', description: 'Short URL code' })
-  @ApiResponse({ status: 200, description: 'Short URL deleted' })
+  @ApiOperation({ summary: 'Delete shortened URL' })
+  @ApiParam({
+    name: 'short',
+    description: 'Short URL code',
+    example: 'abc123',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'URL successfully deleted',
+    type: DeleteResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Short URL not found',
+  })
   @HttpCode(200)
-  async delete(@Param('short') short: string) {
+  async delete(@Param('short') short: string): Promise<DeleteResponseDto> {
     await this.service.deleteShort(short);
     return { message: 'Deleted' };
   }
 
   @Get('analytics/:short')
-  @ApiParam({ name: 'short', description: 'Short URL code' })
-  @ApiResponse({ status: 200, description: 'Analytics' })
-  async analytics(@Param('short') short: string) {
+  @ApiOperation({ summary: 'Get analytics for shortened URL' })
+  @ApiParam({
+    name: 'short',
+    description: 'Short URL code',
+    example: 'abc123',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Analytics retrieved',
+    type: AnalyticsResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Short URL not found',
+  })
+  async analytics(
+    @Param('short') short: string,
+  ): Promise<AnalyticsResponseDto> {
     return this.service.getAnalytics(short);
   }
 }

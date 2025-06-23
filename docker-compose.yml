@@ -1,12 +1,14 @@
 version: '3.8'
 services:
-  db:
+  dba:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_DB: shortener
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-shortener}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    env_file:
+      - .env
     ports:
       - '5432:5432'
     volumes:
@@ -14,13 +16,16 @@ services:
   backend:
     build: .
     depends_on:
-      - db
+      - dba
+    env_file:
+      - .env
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASS: postgres
-      DB_NAME: shortener
+      DB_HOST: ${DB_HOST:-dba}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS:-postgres}
+      DB_NAME: ${DB_NAME:-shortener}
+      PORT: ${PORT:-3000}
     ports:
       - '3000:3000'
     restart: always

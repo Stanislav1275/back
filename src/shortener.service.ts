@@ -59,18 +59,20 @@ export class ShortenerService {
   }
 
   async getAnalytics(short: string) {
-    const entity = await this.shortUrlRepo.findOne({ where: { short } });
-    if (!entity) throw new NotFoundException('Short URL not found');
-    const count = await this.clickStatRepo.count({
-      where: { shortUrl: entity },
+    const entity = await this.shortUrlRepo.findOne({
+      where: { short },
+      relations: ['clicks'],
     });
+    if (!entity) throw new NotFoundException('Short URL not found');
+
     const last5 = await this.clickStatRepo.find({
-      where: { shortUrl: entity },
+      where: { shortUrl: { id: entity.id } },
       order: { clickedAt: 'DESC' },
       take: 5,
     });
+
     return {
-      clickCount: count,
+      clickCount: entity.clickCount,
       last5Ips: last5.map((s) => s.ip),
     };
   }
