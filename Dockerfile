@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 COPY . .
 RUN npm run build
 
@@ -11,6 +11,7 @@ FROM node:20-alpine
 WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
-RUN npm install --only=production --legacy-peer-deps
-EXPOSE 3000
+RUN npm ci --only=production --legacy-peer-deps
+ENV PORT=3010
+EXPOSE ${PORT}
 CMD ["node", "dist/main.js"] 
